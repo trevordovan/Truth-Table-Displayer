@@ -1,8 +1,5 @@
 /* 
- * Author:       Trevor Dovan
- * Start Date:   11/26/2021
- * End Date:     11/30/2021
- * Extra Credit:  
+ * Author: Trevor Dovan
  * 
  * change DECg and MULg to work with linked list of ins/outs instead of arrays
  */
