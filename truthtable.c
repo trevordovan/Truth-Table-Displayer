@@ -1,337 +1,9 @@
-/* 
- * Author: Trevor Dovan
- * 
- * change DECg and MULg to work with linked list of ins/outs instead of arrays
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include "truthtable.h"
 
-typedef enum { AND, OR, NAND, NOR, XOR, NOT, PASS, DECODER, MULTIPLEXER } kind_t;
-
-typedef struct var {
-    char name[17];                  // variable name
-    int value;                      // 0 | 1
-    struct var* next;               // pointer to next var
-} var;
-
-typedef struct gate {
-    kind_t kind;                    // kind of gate (int)
-    int size;                       // indicates size of DECODER and MULTIPLEXER
-    var *inputs;                    // head of linked list of inputs
-    var *outputs;                   // head of linked list of inputs
-    struct gate* next;              // pointer to next gate
-} gate;
-
-gate* order_gates(gate* head, gate *curr);
-gate* insert(gate *head, gate *new_gate);
-gate* insert_after(gate *head, gate *index, gate *new_gate);
-gate* insert_before(gate *head, gate *index, gate *new_gate);
-var* insert_var(var *head, var *new_var);
-void get_truthtable(gate* head, int input_length, int output_length, var *params);
-void print_row(var *params, int input_length, int output_length);
-void assign_values(var *params, int input_length, int row_length, int i);
-void store_value(var *head, char *name, int val);
-void run_circuit(gate *head, var *params);
-void swap (int *num1, int *num2);
-int share_name(var* names1, var* names2);
-int is_in_var_list(var *head, char *name);
-int get_value(var *head, char *name);
-int kind(char* token);
-int ORg(int a, int b);
-int NORg(int a, int b);
-int XORg(int a, int b);
-int ANDg(int a, int b);
-int NANDg(int a, int b);
-int NOTg(int a);
-int PASSg(int a);
-int MULg(int size, var *inputs, var *params);
-void DECg(int size, var* inputs, var *outputs, var* params);
-
-/* 
- * Prints a truthtable of inputs and outputs based on a specified 
- * circuit provided by a text file. 
- */
-int main(int argc, char **argv) {
-
-    FILE *file = fopen(argv[1], "r");                                       // open file
-    char *token = malloc(sizeof(char) * 17);
-    fscanf(file, "%16s", token);
-
-    int input_length, check;                                                // get input length
-    check = fscanf(file, "%d", &input_length);                              
-
-    var *params = NULL;
-    for(int i = 0; i < input_length; ++i) {                                 // store inputs in params
-        fscanf(file, "%16s", token);
-        var *temp = malloc(sizeof(var));
-        strcpy(temp->name, token);
-        temp->next = NULL;
-        params = insert_var(params, temp);
-    }
-    fscanf(file, "%16s", token);
-
-    int output_length;                                                      // get output length  
-    fscanf(file, "%d", &output_length);                                                       
-     for(int i = 0; i < output_length; ++i) {                               // store outputs in params
-        fscanf(file, "%16s", token);
-        var *temp = malloc(sizeof(var));
-        strcpy(temp->name, token);
-        temp->next = NULL;
-        params = insert_var(params, temp);
-    }
-
-    gate *head = NULL;                                                      // read gates                                               
-    while (fscanf(file, "%16s", token) != EOF) {    
-        gate *temp;                        
-        temp = malloc(sizeof(gate));
-        temp->next = NULL;
-        temp->kind = kind(token);                                           // type of gate
-
-        if (temp->kind == 0 || temp->kind == 1 || temp->kind == 2 ||        // store inputs and outputs in gate
-            temp->kind == 3 || temp->kind == 4) {
-            // 2 in and 1 out
-            // inputs
-            var *head_inputs = NULL;
-            temp->inputs = head_inputs;
-            for (int i = 0; i < 2; ++i) {
-                var *temp2 = malloc(sizeof(var));
-                temp2->next = NULL;
-                fscanf(file, "%16s", token);
-                if (strcmp(token, "0") == 0) {
-                    strcpy(temp2->name, token);
-                    temp2->value = 0;
-
-                    if (is_in_var_list(params, token) == 0) {               // store temp vars in params
-                        var *temp = malloc(sizeof(var));
-                        strcpy(temp->name, token);
-                        temp->value = 0;
-                        temp->next = NULL;
-                        params = insert_var(params, temp);
-                    }
-                }
-                else if (strcmp(token, "1") == 0) {
-                    strcpy(temp2->name, token);
-                    temp2->value = 1;
-
-                     if (is_in_var_list(params, token) == 0) {              // store temp vars in params
-                        var *temp = malloc(sizeof(var));
-                        strcpy(temp->name, token);
-                        temp->value = 1;
-                        temp->next = NULL;
-                        params = insert_var(params, temp);
-                    }
-                }
-                else {
-                    strcpy(temp2->name, token);
-                }
-                temp->inputs = insert_var(temp->inputs, temp2);
-            }
-            // outputs
-            var *head_outputs = NULL;
-            temp->outputs = head_outputs;
-            var *temp2 = malloc(sizeof(var));
-            temp2->next = NULL;
-            fscanf(file, "%16s", token);
-            strcpy(temp2->name, token);
-
-            if (is_in_var_list(params, token) == 0) {                       // store temp vars in params
-                var *temp = malloc(sizeof(var));
-                strcpy(temp->name, token);
-                temp->next = NULL;
-                params = insert_var(params, temp);
-            }
-            temp->outputs = insert_var(temp->outputs, temp2);
-        }
-        else if (temp->kind == 5 || temp->kind == 6) {
-            // 1 in 1 out
-            // inputs
-            var *head_inputs = NULL;
-            temp->inputs = head_inputs;
-            var *temp2 = malloc(sizeof(var));
-            temp2->next = NULL;
-            fscanf(file, "%16s", token);
-            if (strcmp(token, "0") == 0) {
-                    strcpy(temp2->name, token);
-                    temp2->value = 0;
-
-                    if (is_in_var_list(params, token) == 0) {               // store temp vars in params
-                        var *temp = malloc(sizeof(var));
-                        strcpy(temp->name, token);
-                        temp->value = 0;
-                        temp->next = NULL;
-                        params = insert_var(params, temp);
-                    }
-                }
-                else if (strcmp(token, "1") == 0) {
-                    strcpy(temp2->name, token);
-                    temp2->value = 1;
-
-                     if (is_in_var_list(params, token) == 0) {              // store temp vars in params
-                        var *temp = malloc(sizeof(var));
-                        strcpy(temp->name, token);
-                        temp->value = 1;
-                        temp->next = NULL;
-                        params = insert_var(params, temp);
-                    }
-                }
-                else {
-                    strcpy(temp2->name, token);
-                }
-            temp->inputs = insert_var(temp->inputs, temp2);
-            // output
-            var *head_outputs = NULL;
-            temp->outputs = head_outputs;
-            var *temp3 = malloc(sizeof(var));
-            temp3->next = NULL;
-            fscanf(file, "%16s", token);
-            strcpy(temp3->name, token);
-
-            if (is_in_var_list(params, token) == 0) {                       // store temp vars in params
-                var *temp = malloc(sizeof(var));
-                strcpy(temp->name, token);
-                temp->next = NULL;
-                params = insert_var(params, temp);
-            }
-            temp->outputs = insert_var(temp->outputs, temp3);
-        }
-        else if (temp->kind == 7){                                          // decoder (n in 2^n out)
-            fscanf(file, "%d", &(temp->size));
-            // inputs
-            int in_size = temp->size;
-            var *head_inputs = NULL;
-            temp->inputs = head_inputs;
-            for (int i = 0; i < in_size; ++i) {
-                fscanf(file, "%16s", token);
-                var *temp2 = malloc(sizeof(var));
-                temp2->next = NULL;
-                if (strcmp(token, "0") == 0) {
-                    strcpy(temp2->name, token);
-                    temp2->value = 0;
-                }
-                else if (strcmp(token, "1") == 0) {
-                    strcpy(temp2->name, token);
-                    temp2->value = 1;
-                }
-                else {
-                    strcpy(temp2->name, token);
-                }
-                temp->inputs = insert_var(temp->inputs, temp2);
-            }
-            //outputs
-            int out_size = pow(2, temp->size);
-            var *head_outputs = NULL;
-            temp->outputs = head_outputs;
-            for (int i = 0; i < out_size; ++i) {
-                fscanf(file, "%16s", token);
-                var *temp2 = malloc(sizeof(var));
-                temp2->next = NULL;
-                strcpy(temp2->name, token);
-                temp->outputs = insert_var(temp->outputs, temp2);
-
-                if (is_in_var_list(params, token) == 0) {                   // store temp vars in params
-                    var *temp = malloc(sizeof(var));
-                    strcpy(temp->name, token);
-                    temp->next = NULL;
-                    params = insert_var(params, temp);
-                }
-            }
-        }  
-        else if (temp->kind == 8) {                                         // muliplexer (variable in 1 out)
-            fscanf(file, "%d", &(temp->size));
-            int in_size = pow(2,temp->size) + temp->size; 
-            var *head_inputs = NULL;
-            temp->inputs = head_inputs;
-            // inputs (ins and selectors)
-            for (int i = 0; i < in_size; ++i) {
-                fscanf(file, "%16s", token);
-                var *temp2 = malloc(sizeof(var));
-                temp2->next = NULL;
-                if (strcmp(token, "0") == 0) {
-                    strcpy(temp2->name, token);
-                    temp2->value = 0;
-                }
-                else if (strcmp(token, "1") == 0) {
-                    strcpy(temp2->name, token);
-                    temp2->value = 1;
-                }
-                else {
-                    strcpy(temp2->name, token);
-                }
-                temp->inputs = insert_var(temp->inputs, temp2);
-            }
-            // output
-            var *head_outputs = NULL;
-            temp->outputs = head_outputs;
-            var *temp2 = malloc(sizeof(var));
-            temp2->next = NULL;
-            fscanf(file, "%16s", token);
-            strcpy(temp2->name, token);
-
-            if (is_in_var_list(params, token) == 0) {                       // store temp vars in params
-                var *temp = malloc(sizeof(var));
-                strcpy(temp->name, token);
-                temp->next = NULL;
-                params = insert_var(params, temp);
-            }
-            temp->outputs = insert_var(temp->outputs, temp2);
-        }
-        head = order_gates(head, temp);
-    }
-
-    // print gates (test purposes)
-    // gate *temp = head;
-    // while (temp != NULL) { 
-    //     printf("%d\n", temp->kind);
-    //     temp = temp->next;
-    // }                                        
-
-    fclose(file);                                                           // close file
-
-    get_truthtable(head, input_length, output_length, params);              // go through gates and print values
-
-    while (head != NULL) {                                                  // free (gates, vars)
-        gate *temp = head;
-
-        var* temp_in = head->inputs;
-        while (temp_in != NULL) {
-            var *temp2 = temp_in;
-            temp_in = temp_in->next;
-            free(temp2);
-        }
-        free(temp_in);
-
-        var* temp_out = head->outputs;
-        while (temp_out != NULL) {
-            var *temp2 = temp_out;
-            temp_out = temp_out->next;
-            free(temp2);
-        }
-
-        head = head->next;
-        free(temp);
-    }
-    while (params != NULL) {                                             
-        var *temp = params;
-        params = params->next;
-        free(temp);
-    }
-    free(head);
-    free(params);
-    free(token);
-
-    return EXIT_SUCCESS;
-}
-
-/*
- * Prints a truthtable of specified inputs and outputs based on provided cirucit.
- * @param head head of list containing gates that make up circuit (ordered)
- * @param input_length length of inputs array
- * @param out_length  length of outputs array
- * @param params head of the list of parameters
- */
 void get_truthtable(gate* head, int input_length, int output_length, var *params) {
     int row_length = pow(2, input_length);
     for (int i = 0; i < row_length; ++i) {                  
@@ -343,14 +15,6 @@ void get_truthtable(gate* head, int input_length, int output_length, var *params
     }
 }
 
-/*
- * Assigns truthtable values to inputs in parameter list 
- * based on a specified row of the truthtable
- * @param params head of parameter list
- * @param input_length amount of inputs
- * @param row_length length of row of entire truthtable
- * @param i index of row from entire truthtable
- */
 void assign_values(var *params, int input_length, int row_length, int i) {
     var *temp = params;
     for (int j = 0; j < input_length; j++) {
@@ -389,12 +53,6 @@ void assign_values(var *params, int input_length, int row_length, int i) {
     }
 }
 
-/*
- * Traveres through list of gates comparing inputs/outputs of gates to 
- * param list to get and store values based on the circuit.
- * @param head head of the gate list
- * @param params head of the list of inputs/outputs/tempVariables
- */
 void run_circuit(gate *head, var *params) {
     gate *temp = head;
     while (temp != NULL) {
@@ -450,12 +108,6 @@ void run_circuit(gate *head, var *params) {
     }
 }
 
-/*
- * Prints one row of a truthtable
- * @param params head of parameter list
- * @param input_length length of inputs
- * @param output_length length of outputs
- */
 void print_row(var *params, int input_length, int output_length) {
     var *temp = params;
         for (int j = 0; j < input_length; ++j) {
@@ -475,12 +127,6 @@ void print_row(var *params, int input_length, int output_length) {
         printf("\n");
 }
 
-/*
- * Inserts gate at correct index in gate list so it is ordered.
- * @param head head of the gate list
- * @param curr the current gate being inserted into ordered list
- * @return head head of the gate list
- */
 gate* order_gates(gate* head, gate *curr) {
     gate *ptr = head;
     gate *target = NULL;
@@ -493,7 +139,7 @@ gate* order_gates(gate* head, gate *curr) {
         temp = temp->next;
     }
 
-    temp = curr->outputs;                                   // get length of curr inputs
+    temp = curr->outputs;                                       // get length of curr inputs
     int length_curr_outputs = 0;
     while (temp != NULL) {                                      
         length_curr_outputs++;
@@ -531,12 +177,6 @@ gate* order_gates(gate* head, gate *curr) {
     }
 }
 
-/*
- * Returns 0 | 1 if there is a common element in the list.
- * @param names1 list 1
- * @param names2 list 2
- * @return 0 | 1
- */
 int share_name(var* names1, var* names2) {
     var *temp = names1;
     while (temp != NULL) {
@@ -552,12 +192,6 @@ int share_name(var* names1, var* names2) {
     return 0;
 }
 
-/*
- * Inserts a gate at the end of the list.
- * @param head head of the list
- * @param new_gate new gate to be added at end of list
- * @return head head of the list after insertion
- */
 gate* insert(gate *head, gate *new_gate) {
     if (head == NULL) {
         head = new_gate;
@@ -571,13 +205,6 @@ gate* insert(gate *head, gate *new_gate) {
     return head;
 }
 
-/*
- * Inserts a gate after a specified gate.
- * @param head head of the list
- * @param index specified gate
- * @param new_gate new gate to be added after index
- * @return head head of the list after insertion
- */
 gate* insert_after(gate *head, gate *index, gate *new_gate) {
     gate *ptr = head;
     while (ptr != NULL) {           // may need to change
@@ -592,13 +219,6 @@ gate* insert_after(gate *head, gate *index, gate *new_gate) {
     return head;
 }
 
-/*
- * Inserts a gate before a specified gate.
- * @param head head of the list
- * @param index specified gate
- * @param new_gate new gate to be added before index
- * @return head head of the list after insertion
- */
 gate* insert_before(gate *head, gate *index, gate *new_gate) {
     if (head == index) {            // if index is first in list
         gate *temp = head;
@@ -619,12 +239,6 @@ gate* insert_before(gate *head, gate *index, gate *new_gate) {
     return head;
 }
 
-/*
- * Inserts a var at the end of the list.
- * @param head head of the list
- * @param new_var new var to be added at end of list
- * @return head head of the list after insertion
- */
 var* insert_var(var *head, var *new_var) {
     if (head == NULL) {
         head = new_var;
@@ -638,12 +252,6 @@ var* insert_var(var *head, var *new_var) {
     return head;
 }
 
-/*
- * Given a variable name returns 0 or 1 if is in variable list.
- * @param head head of the var list
- * @param name variable name to be checked for
- * @return 0 : not in list 1 : is in list
- */
 int is_in_var_list(var *head, char *name) {
     var *temp = head;
     while (temp != NULL) {
@@ -655,12 +263,6 @@ int is_in_var_list(var *head, char *name) {
     return 0;
 }
 
-/*
- * Returns the value associated with a given variable name in a var list.
- * @param head head of the var list
- * @param name name of the given variable
- * @return value associated with variable, returns -1 if variable is not in list
- */
 int get_value(var *head, char *name) {
     var *temp = head;
     while (temp != NULL) {
@@ -672,12 +274,6 @@ int get_value(var *head, char *name) {
     return -1;
 }
 
-/*
- * Assigns a value to a given variable name in a var list.
- * @param head head of the var list
- * @param name name of variable
- * @param val value to be assigned
- */
 void store_value(var *head, char *name, int val) {
     var *temp = head;
     while (temp != NULL) {
@@ -689,22 +285,12 @@ void store_value(var *head, char *name, int val) {
     }
 }
 
-/*
- * Swaps the value sof two given integers.
- * @param num1 address of first integer
- * @param num2 address of second integer
- */
 void swap (int *num1, int *num2) {
     int temp = *num1;
     *num1 = *num2;
     *num2 = temp;
 }
 
-/*
- * Returns number form of gate given a specified gate in form char*.
- * @param token char array to be compared to gates
- * @return number form of gate
- */
 int kind(char* token) {
     if (strcmp(token, "AND") == 0) {                                  
         return 0;
@@ -735,8 +321,6 @@ int kind(char* token) {
     }
     return -1;
 }
-
-/******************** gates ********************/
 
 int ORg(int a, int b) {
     if (a == 1 || b == 1) { return 1; } else { return 0; }

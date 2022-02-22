@@ -1,4 +1,5 @@
-TARGET     = truthtable
+TARGET     = main
+OBJ 	   = src/main.c
 CC         = clang
 SANITIZERS = -fsanitize=address $(if $(findstring clang,$(CC)),-fsanitize=undefined)
 OPT        =
